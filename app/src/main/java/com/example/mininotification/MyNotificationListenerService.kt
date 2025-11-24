@@ -85,7 +85,7 @@ class MyNotificationListenerService : NotificationListenerService() {
     }
     private fun getNotificationContent(sbn: StatusBarNotification): Pair<String?, String?> {
         val extras = sbn.notification.extras
-        val title = extras.getString(Notification.EXTRA_TITLE)
+        var title = extras.getString(Notification.EXTRA_TITLE)
         var text: CharSequence? = null
 
         // 1. Try EXTRA_TEXT_LINES (for messaging apps)
@@ -114,7 +114,10 @@ class MyNotificationListenerService : NotificationListenerService() {
             text = sbn.notification.tickerText
         }
 
-        return Pair(title, text?.toString())
+        title = if(title.isNullOrEmpty()) "注意" else title
+        text = if(text.isNullOrEmpty()) "收到一条非标消息" else text.toString()
+
+        return Pair(title, text)
     }
 
     private fun showBannerNotification(sbn: StatusBarNotification) {
