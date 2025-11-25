@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +34,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,7 +59,8 @@ fun ManagedAppsScreen(
         onSearchQueryChanged = viewModel::onSearchQueryChanged,
         onAppSelectionChanged = viewModel::onAppSelectionChanged,
         onSelectAll = viewModel::onSelectAll,
-        onShowOnlySelectedChanged = viewModel::onShowOnlySelectedChanged // 新增
+        onShowOnlySelectedChanged = viewModel::onShowOnlySelectedChanged,
+        onApplyChanges = viewModel::restartNotificationListenerService // 新增：应用更改
     )
 }
 
@@ -69,8 +75,34 @@ private fun ManagedAppsContent(
     onSearchQueryChanged: (String) -> Unit,
     onAppSelectionChanged: (String, Boolean) -> Unit,
     onSelectAll: (Boolean) -> Unit,
-    onShowOnlySelectedChanged: (Boolean) -> Unit, // 新增
+    onShowOnlySelectedChanged: (Boolean) -> Unit,
+    onApplyChanges: () -> Unit // 新增
 ) {
+    var showRestartDialog by remember { mutableStateOf(false) }
+
+    if (showRestartDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestartDialog = false },
+            title = { Text("提示") },
+            text = { Text("服务已尝试重启，若依然没有托管成功建议手动重新开启通知权限。") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onApplyChanges() // 执行重启服务的逻辑
+                        showRestartDialog = false
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showRestartDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -126,7 +158,7 @@ private fun ManagedAppsContent(
                         )
                         Text("全选")
                     }
-                    
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { onShowOnlySelectedChanged(!uiState.showOnlySelected) }
@@ -136,6 +168,10 @@ private fun ManagedAppsContent(
                             onCheckedChange = null // 点击Row来触发
                         )
                         Text("仅显示已勾选")
+                    }
+
+                    Button(onClick = { showRestartDialog = true }) {
+                        Text("应用")
                     }
                 }
 
@@ -181,7 +217,7 @@ private fun ManagedAppsContent(
                             }
                         }
                     }
-                    
+
                     items(otherApps, key = { "other-${it.packageName}" }) { app ->
                         AppItem(
                             app = app,
@@ -251,7 +287,8 @@ private fun ManagedAppsScreenPreview() {
         onSearchQueryChanged = {},
         onAppSelectionChanged = { _, _ -> },
         onSelectAll = {},
-        onShowOnlySelectedChanged = {}
+        onShowOnlySelectedChanged = {},
+        onApplyChanges = {} // 新增
     )
 }
 
@@ -265,6 +302,7 @@ private fun ManagedAppsScreenLoadingPreview() {
         onSearchQueryChanged = {},
         onAppSelectionChanged = { _, _ -> },
         onSelectAll = {},
-        onShowOnlySelectedChanged = {}
+        onShowOnlySelectedChanged = {},
+        onApplyChanges = {} // 新增
     )
 }

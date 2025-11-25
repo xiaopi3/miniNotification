@@ -1,12 +1,9 @@
 package com.example.mininotification
 
-import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,7 +31,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +53,8 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current // 获取当前上下文
-    var showHelpDialog by rememberSaveable { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+    var showRestartDialog by remember { mutableStateOf(false) }
 
     if (showHelpDialog) {
         AlertDialog(
@@ -101,6 +99,29 @@ fun MainScreen(
             confirmButton = {
                 Button(onClick = { showHelpDialog = false }) {
                     Text("确定")
+                }
+            }
+        )
+    }
+
+    if (showRestartDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestartDialog = false },
+            title = { Text("提示") },
+            text = { Text("服务已尝试重启，若依然没有托管成功建议手动重新开启通知权限。") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.restartNotificationListenerService()
+                        showRestartDialog = false
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showRestartDialog = false }) {
+                    Text("取消")
                 }
             }
         )
@@ -232,24 +253,7 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                onClick = {
-                    try {
-                        val componentName = ComponentName(context, MyNotificationListenerService::class.java)
-                        context.packageManager.setComponentEnabledSetting(
-                            componentName,
-                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                            PackageManager.DONT_KILL_APP
-                        )
-                        context.packageManager.setComponentEnabledSetting(
-                            componentName,
-                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                            PackageManager.DONT_KILL_APP
-                        )
-                        Toast.makeText(context, "服务已尝试重启", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "重启失败: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
+                onClick = { showRestartDialog = true }
             ) { Text("重启托管服务") }
 
             Row(

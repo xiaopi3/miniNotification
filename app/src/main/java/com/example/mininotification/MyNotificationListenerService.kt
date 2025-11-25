@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import java.io.ByteArrayOutputStream
 
 // 从 SettingsViewModel 导入枚举类而不是重新定义
@@ -29,21 +30,25 @@ class MyNotificationListenerService : NotificationListenerService() {
         super.onCreate()
         sharedPreferences = getSharedPreferences("settings", Context.MODE_PRIVATE)
         Logger.log(this, TAG, "服务已创建")
+        Log.d(TAG, "onCreate: 服务已创建")
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         Logger.log(this, TAG, "监听器已连接")
+        Log.d(TAG, "onListenerConnected: 监听器已连接")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Logger.log(this, TAG, "监听器已断开")
+        Log.d(TAG, "onListenerDisconnected: 监听器已断开")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Logger.log(this, TAG, "服务已销毁")
+        Log.d(TAG, "onDestroy: 服务已销毁")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -95,10 +100,14 @@ class MyNotificationListenerService : NotificationListenerService() {
             return false
         }
 
-        if (sbn.isOngoing) {
-            Logger.log(this, TAG, "已过滤：通知是持续性通知。")
-            return false
-        }
+//        if (sbn.isOngoing) {
+//            Logger.log(this, TAG, "已过滤：通知是持续性通知。")
+//            return false
+//        }
+//        if (sbn.isOngoing && sbn.notification.category != Notification.CATEGORY_CALL) {
+//            Logger.log(this, TAG, "已过滤：通知是持续性通知且非电话类型。")
+//            return false
+//        }
 
         return true
     }
@@ -117,7 +126,9 @@ class MyNotificationListenerService : NotificationListenerService() {
             val messageText = bundle.getCharSequence("text")?.toString()?.trim()
             if (!messageText.isNullOrBlank()) {
                 val sender = bundle.getCharSequence("sender")?.toString()?.trim()
-                extractedText = if (!sender.isNullOrBlank()) "$sender: $messageText" else messageText
+                val result = if (!sender.isNullOrBlank()) "$sender: $messageText" else messageText
+                Logger.log(this, TAG, "获取到内容 (MessagingStyle): $result")
+                extractedText = result
             }
         }
 
@@ -125,6 +136,7 @@ class MyNotificationListenerService : NotificationListenerService() {
         if (extractedText.isNullOrBlank()) {
             val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n")?.trim()
             if (!lines.isNullOrBlank()) {
+                Logger.log(this, TAG, "获取到内容 (EXTRA_TEXT_LINES): $lines")
                 extractedText = lines
             }
         }
@@ -133,6 +145,7 @@ class MyNotificationListenerService : NotificationListenerService() {
         if (extractedText.isNullOrBlank()) {
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
             if (!bigText.isNullOrBlank()) {
+                Logger.log(this, TAG, "获取到内容 (EXTRA_BIG_TEXT): $bigText")
                 extractedText = bigText
             }
         }
@@ -141,6 +154,7 @@ class MyNotificationListenerService : NotificationListenerService() {
         if (extractedText.isNullOrBlank()) {
             val standardText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()
             if (!standardText.isNullOrBlank()) {
+                Logger.log(this, TAG, "获取到内容 (EXTRA_TEXT): $standardText")
                 extractedText = standardText
             }
         }
@@ -149,6 +163,7 @@ class MyNotificationListenerService : NotificationListenerService() {
         if (extractedText.isNullOrBlank()) {
             val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()
             if (!subText.isNullOrBlank()) {
+                Logger.log(this, TAG, "获取到内容 (EXTRA_SUB_TEXT): $subText")
                 extractedText = subText
             }
         }
@@ -157,6 +172,7 @@ class MyNotificationListenerService : NotificationListenerService() {
         if (extractedText.isNullOrBlank()) {
             val ticker = sbn.notification.tickerText?.toString()?.trim()
             if (!ticker.isNullOrBlank()) {
+                Logger.log(this, TAG, "获取到内容 (tickerText): $ticker")
                 extractedText = ticker
             }
         }

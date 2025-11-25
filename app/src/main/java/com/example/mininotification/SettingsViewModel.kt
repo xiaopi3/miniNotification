@@ -1,6 +1,7 @@
 package com.example.mininotification
 
 import android.app.Application
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -8,6 +9,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -263,6 +265,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             putExtra("text", "这是一条非常长的、用于测试滚动效果的通知内容，它会一直滚动下去。")
         }
         getApplication<Application>().startService(intent)
+    }
+
+    /**
+     * 重启通知监听服务
+     */
+    fun restartNotificationListenerService() {
+        val context = getApplication<Application>()
+        try {
+            val componentName = ComponentName(context, MyNotificationListenerService::class.java)
+            context.packageManager.setComponentEnabledSetting(
+                componentName,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            context.packageManager.setComponentEnabledSetting(
+                componentName,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            Toast.makeText(context, "服务已尝试重启", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "重启失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     init { 
