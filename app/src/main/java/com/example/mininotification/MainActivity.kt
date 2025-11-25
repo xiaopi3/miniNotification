@@ -1,5 +1,6 @@
 package com.example.mininotification
 
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -7,37 +8,41 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.mininotification.ui.theme.MiniNotificationTheme
 
 class MainActivity : ComponentActivity() {
-    
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { // Handle the result if needed
     }
 
+    private val logViewModel: LogViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         // 检查并请求通知监听权限
         requestNotificationListenerPermission()
-        
+
         setContent {
             MiniNotificationTheme {
                 val navController = rememberNavController()
-                
+
                 // 使用 MyApplication 中的统一 SettingsViewModel
                 val settingsViewModel = (application as MyApplication).settingsViewModel!!
 
                 NavHost(
-                    navController = navController, 
+                    navController = navController,
                     startDestination = "main",
                     enterTransition = {
                         slideInHorizontally(animationSpec = tween(300), initialOffsetX = { it })
@@ -55,7 +60,8 @@ class MainActivity : ComponentActivity() {
                     composable("main") {
                         MainScreen(
                             viewModel = settingsViewModel,
-                            onNavigateToSettings = { navController.navigate("settings") }
+                            onNavigateToSettings = { navController.navigate("settings") },
+                            onNavigateToLogs = { navController.navigate("logs") }
                         )
                     }
                     composable("settings") {
@@ -78,11 +84,17 @@ class MainActivity : ComponentActivity() {
                             onBack = { navController.popBackStack() }
                         )
                     }
+                    composable("logs") {
+                        LogScreen(
+                            logViewModel = logViewModel, // 直接传递由 Activity 创建的 ViewModel
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
             }
         }
     }
-    
+
     private fun requestNotificationListenerPermission() {
         // 检查是否已经授予权限
         if (!isNotificationServiceEnabled()) {
@@ -91,15 +103,15 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(intent)
         }
     }
-    
+
     private fun isNotificationServiceEnabled(): Boolean {
         val pkgName = packageName
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
         if (!flat.isNullOrEmpty()) {
             val names = flat.split(":").toTypedArray()
             for (name in names) {
-                val componentName = android.content.ComponentName.unflattenFromString(name)
-                if (componentName != null && componentName.packageName == pkgName) {
+                val cn = ComponentName.unflattenFromString(name)
+                if (cn != null && cn.packageName == pkgName) {
                     return true
                 }
             }

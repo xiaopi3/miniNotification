@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 fun MainScreen(
     viewModel: SettingsViewModel, // 接收 ViewModel
     onNavigateToSettings: () -> Unit,
+    onNavigateToLogs: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current // 获取当前上下文
@@ -249,6 +251,18 @@ fun MainScreen(
                     }
                 }
             ) { Text("重启托管服务") }
+
+            Row(
+                modifier = Modifier
+                    .clickable { onNavigateToLogs() }
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.List, "日志")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("日志")
+            }
         }
     }
 }

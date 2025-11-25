@@ -1,6 +1,7 @@
 package com.example.mininotification
 
 import android.animation.ObjectAnimator
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -28,11 +29,11 @@ import android.view.WindowManager
 import android.view.animation.LinearInterpolator
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.util.Log
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -95,6 +96,7 @@ data class NotificationData(
 
 class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, LifecycleOwner {
 
+    private val TAG = "OverlayService"
     private lateinit var windowManager: WindowManager
     private var overlayView: LinearLayout? = null
     private var textView: TextView? = null
@@ -134,6 +136,7 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .build()
         startForeground(1, notification)
+        Logger.log(this, TAG, "服务已创建并启动前台服务")
     }
     
     private fun createNotificationChannel() {
@@ -170,9 +173,8 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
                 intent.getParcelableExtra("contentIntent")
             }
             
-            Log.d("OverlayService", "Received contentIntent: $contentIntent")
-            Log.d("OverlayService", "ContentIntent target package: ${contentIntent?.targetPackage}")
-            Log.d("OverlayService", "ContentIntent creator package: ${contentIntent?.creatorPackage}")
+            Logger.log(this, TAG, "接收到 contentIntent: $contentIntent")
+            Logger.log(this, TAG, "contentIntent 的目标包名: ${contentIntent?.targetPackage}")
             
             val notificationData = NotificationData(
                 settings = settings,
@@ -188,9 +190,9 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
             
             // 添加日志记录PendingIntent是否成功传递
             if (notificationData.contentIntent != null) {
-                Log.d("OverlayService", "ContentIntent received for package: ${notificationData.packageName}")
+                Logger.log(this, TAG, "成功为包 ${notificationData.packageName} 接收到 contentIntent")
             } else {
-                Log.w("OverlayService", "No ContentIntent received for package: ${notificationData.packageName}")
+                Logger.log(this, TAG, "警告: 未能为包 ${notificationData.packageName} 接收到 contentIntent")
             }
             
             synchronized(notificationQueue) {
@@ -253,6 +255,8 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
         stopSelf()
     }
 
+    @SuppressLint("ClickableViewAccessibility")
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun showOverlay(notification: NotificationData) {
         val gravity = if (notification.settings.popupPosition == PopupPosition.TOP) Gravity.TOP else Gravity.BOTTOM
         val params = WindowManager.LayoutParams(
@@ -307,24 +311,16 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
                 
                 // 如果手势检测器没有处理该事件，则处理点击事件
                 if (!gestureHandled && event.action == MotionEvent.ACTION_UP) {
-                    // 获取点击事件在视图中的坐标
-                    val x = event.x
-                    val y = event.y
-                    
-                    Log.d("OverlayService", "Notification clicked")
-                    
-                    // 直接使用传递的PendingIntent
+                    Logger.log(this@OverlayService, TAG, "检测到点击事件")
                     val contentIntent = notification.contentIntent
-                    Log.d("OverlayService", "Using contentIntent: $contentIntent")
-                    
                     if (contentIntent != null) {
-                        Log.d("OverlayService", "Attempting to open notification page for package: ${notification.packageName}")
+                        Logger.log(this@OverlayService, TAG, "准备使用 contentIntent 跳转，目标包名：${notification.packageName}")
                         openNotificationPage(contentIntent)
                     } else if (notification.packageName != null) {
-                        Log.d("OverlayService", "Opening app directly for package: ${notification.packageName}")
+                        Logger.log(this@OverlayService, TAG, "contentIntent 为空，尝试直接打开应用：${notification.packageName}")
                         openApp(notification.packageName)
                     } else {
-                        Log.w("OverlayService", "No package name or content intent available")
+                        Logger.log(this@OverlayService, TAG, "警告：既无 contentIntent 也无包名，无法跳转")
                         Toast.makeText(this@OverlayService, "无法打开通知", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -614,20 +610,8 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
     // 跳转到通知的具体页面
     private fun openNotificationPage(pendingIntent: android.app.PendingIntent) {
         try {
-            Log.d("OverlayService", "Sending PendingIntent: $pendingIntent")
-            Log.d("OverlayService", "PendingIntent target package: ${pendingIntent.targetPackage}")
-            Log.d("OverlayService", "PendingIntent creator package: ${pendingIntent.creatorPackage}")
-
-            // 检查PendingIntent是否有效
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (pendingIntent.isActivity) {
-                    Log.d("OverlayService", "PendingIntent is for an Activity")
-                } else if (pendingIntent.isBroadcast) {
-                    Log.d("OverlayService", "PendingIntent is for a Broadcast")
-                } else if (pendingIntent.isService) {
-                    Log.d("OverlayService", "PendingIntent is for a Service")
-                }
-            }
+            Logger.log(this, TAG, "开始发送 PendingIntent: $pendingIntent")
+            Logger.log(this, TAG, "PendingIntent 的目标包名: ${pendingIntent.targetPackage}")
 
             // To launch an activity from a non-activity context (like a service),
             // we must add the FLAG_ACTIVITY_NEW_TASK flag. If the activity is already
@@ -635,34 +619,39 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
             val fillInIntent = Intent().apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
-
+            Logger.log(this, TAG, "使用 fillInIntent（包含 FLAG_ACTIVITY_NEW_TASK）发送...")
             // 发送PendingIntent
             pendingIntent.send(this@OverlayService, 0, fillInIntent)
 
-            Log.d("OverlayService", "PendingIntent sent successfully")
+            Logger.log(this, TAG, "PendingIntent 发送成功")
 
             // 移除通知
-            removeOverlay()
-            stopSelf()
+            handler.postDelayed({
+                removeOverlay()
+                stopSelf()
+            }, 500) // 延迟500毫秒再移除，确保跳转成功
         } catch (e: android.app.PendingIntent.CanceledException) {
-            Log.e("OverlayService", "PendingIntent was canceled: ${e.message}", e)
+            Logger.log(this, TAG, "错误：PendingIntent 已被取消: ${e.message}")
             Toast.makeText(this, "通知意图已被取消", Toast.LENGTH_SHORT).show()
             // 如果PendingIntent被取消，则尝试通过包名打开应用
             currentNotificationData?.packageName?.let { packageName ->
+                Logger.log(this, TAG, "尝试回退：直接打开应用 ${packageName}")
                 openApp(packageName)
             }
         } catch (e: SecurityException) {
-            Log.e("OverlayService", "SecurityException when sending PendingIntent: ${e.message}", e)
+            Logger.log(this, TAG, "错误：发送 PendingIntent 时出现安全异常: ${e.message}")
             Toast.makeText(this, "权限不足，无法打开通知页面: ${e.message}", Toast.LENGTH_LONG).show()
             // 如果权限不足，则尝试通过包名打开应用
             currentNotificationData?.packageName?.let { packageName ->
+                Logger.log(this, TAG, "尝试回退：直接打开应用 ${packageName}")
                 openApp(packageName)
             }
         } catch (e: Exception) {
-            Log.e("OverlayService", "Error sending PendingIntent: ${e.message}", e)
+            Logger.log(this, TAG, "错误：发送 PendingIntent 时发生未知错误: ${e.message}")
             Toast.makeText(this, "打开通知页面时出错: ${e.message}", Toast.LENGTH_LONG).show()
             // 如果PendingIntent无法使用，则尝试通过包名打开应用
             currentNotificationData?.packageName?.let { packageName ->
+                Logger.log(this, TAG, "尝试回退：直接打开应用 ${packageName}")
                 openApp(packageName)
             }
         }
@@ -671,17 +660,21 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
     // 跳转到指定应用
     private fun openApp(packageName: String) {
         try {
+            Logger.log(this, TAG, "正在获取 ${packageName} 的启动 Intent...")
             val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Logger.log(this, TAG, "找到启动 Intent，正在启动应用...")
                 startActivity(launchIntent)
                 // 移除通知
                 removeOverlay()
                 stopSelf()
             } else {
+                Logger.log(this, TAG, "警告：无法为 ${packageName} 找到启动 Intent")
                 Toast.makeText(this, "无法打开应用: $packageName", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
+            Logger.log(this, TAG, "错误：打开应用时出错: ${e.message}")
             Toast.makeText(this, "打开应用时出错: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
@@ -693,5 +686,6 @@ class OverlayService : Service(), ViewModelStoreOwner, SavedStateRegistryOwner, 
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         removeOverlay()
         synchronized(notificationQueue) { notificationQueue.clear() }
+        Logger.log(this, TAG, "服务已销毁")
     }
 }

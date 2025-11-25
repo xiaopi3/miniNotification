@@ -11,9 +11,9 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
 import java.io.ByteArrayOutputStream
 
 // 从 SettingsViewModel 导入枚举类而不是重新定义
@@ -28,11 +28,27 @@ class MyNotificationListenerService : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         sharedPreferences = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        Logger.log(this, TAG, "服务已创建")
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Logger.log(this, TAG, "监听器已连接")
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Logger.log(this, TAG, "监听器已断开")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Logger.log(this, TAG, "服务已销毁")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
-        Log.d(TAG, "Notification Posted: ${sbn?.packageName}")
+        Logger.log(this, TAG, "收到新通知：${sbn?.packageName}")
 
         if (sbn == null || sbn.packageName == packageName) return
 
@@ -46,22 +62,28 @@ class MyNotificationListenerService : NotificationListenerService() {
         appContext?.settingsViewModel?.addRecentNotificationApp(sbn.packageName)
 
         if (shouldShowPopup(sbn)) {
+            Logger.log(this, TAG, "将为 ${sbn.packageName} 显示通知")
             showPopupNotification(sbn)
-        } else {
-            Log.d(TAG, "Notification filtered out for package: ${sbn.packageName}")
         }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
-        Log.d(TAG, "Notification Removed: ${sbn?.packageName}")
+        Logger.log(this, TAG, "通知已移除：${sbn?.packageName}")
     }
 
     private fun shouldShowPopup(sbn: StatusBarNotification): Boolean {
+        // 过滤掉分组摘要通知
+        if ((sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) {
+            Logger.log(this, TAG, "已过滤：通知是分组摘要。")
+            return false
+        }
+
         val packageName = sbn.packageName
 
         val selectedPackages = sharedPreferences.getStringSet("selected_packages", emptySet())
         if (selectedPackages?.contains(packageName) != true) {
+            Logger.log(this, TAG, "已过滤：${packageName} 不在指定应用列表中。")
             return false
         }
 
@@ -69,10 +91,12 @@ class MyNotificationListenerService : NotificationListenerService() {
         val selectedHours = sharedPreferences.getStringSet("selected_hours", null)
             ?.map { it.toInt() }?.toSet() ?: (6..20).toSet()
         if (currentHour !in selectedHours) {
+            Logger.log(this, TAG, "已过滤：当前时间 ${currentHour} 不在启用时段内。")
             return false
         }
 
         if (sbn.isOngoing) {
+            Logger.log(this, TAG, "已过滤：通知是持续性通知。")
             return false
         }
 
@@ -83,108 +107,77 @@ class MyNotificationListenerService : NotificationListenerService() {
         // 统一使用 OverlayService 来显示所有样式的弹窗通知
         showCustomOverlayNotification(sbn)
     }
-    private fun getNotificationContent(sbn: StatusBarNotification): Pair<String?, String?> {
+
+    private fun getNotificationContent(sbn: StatusBarNotification): Pair<String, String> {
         val extras = sbn.notification.extras
-        var title = extras.getString(Notification.EXTRA_TITLE)
-        var text: CharSequence? = null
+        var extractedText: String? = null
 
-        // 1. Try EXTRA_TEXT_LINES (for messaging apps)
-        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-        if (lines != null && lines.isNotEmpty()) {
-            text = lines.joinToString("\n")
+        // 0. MessagingStyle
+        (extras.getParcelableArray(Notification.EXTRA_MESSAGES)?.lastOrNull() as? Bundle)?.let { bundle ->
+            val messageText = bundle.getCharSequence("text")?.toString()?.trim()
+            if (!messageText.isNullOrBlank()) {
+                val sender = bundle.getCharSequence("sender")?.toString()?.trim()
+                extractedText = if (!sender.isNullOrBlank()) "$sender: $messageText" else messageText
+            }
         }
 
-        // 2. If no lines, try EXTRA_BIG_TEXT
-        if (text.isNullOrEmpty()) {
-            text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+        // 1. EXTRA_TEXT_LINES
+        if (extractedText.isNullOrBlank()) {
+            val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n")?.trim()
+            if (!lines.isNullOrBlank()) {
+                extractedText = lines
+            }
         }
 
-        // 3. If still no text, try EXTRA_TEXT (the standard one)
-        if (text.isNullOrEmpty()) {
-            text = extras.getCharSequence(Notification.EXTRA_TEXT)
+        // 2. EXTRA_BIG_TEXT
+        if (extractedText.isNullOrBlank()) {
+            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
+            if (!bigText.isNullOrBlank()) {
+                extractedText = bigText
+            }
         }
 
-        // 4. If still no text, try EXTRA_SUB_TEXT
-        if (text.isNullOrEmpty()) {
-            text = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)
+        // 3. EXTRA_TEXT
+        if (extractedText.isNullOrBlank()) {
+            val standardText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()
+            if (!standardText.isNullOrBlank()) {
+                extractedText = standardText
+            }
         }
 
-        // 5. As a last resort for text, use tickerText
-        if (text.isNullOrEmpty()) {
-            text = sbn.notification.tickerText
+        // 4. EXTRA_SUB_TEXT
+        if (extractedText.isNullOrBlank()) {
+            val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()
+            if (!subText.isNullOrBlank()) {
+                extractedText = subText
+            }
         }
 
-        title = if(title.isNullOrEmpty()) "注意" else title
-        text = if(text.isNullOrEmpty()) "收到一条非标消息" else text.toString()
+        // 5. tickerText
+        if (extractedText.isNullOrBlank()) {
+            val ticker = sbn.notification.tickerText?.toString()?.trim()
+            if (!ticker.isNullOrBlank()) {
+                extractedText = ticker
+            }
+        }
+
+        val title = extras.getString(Notification.EXTRA_TITLE).takeIf { !it.isNullOrBlank() } ?: "注意"
+        val text = extractedText ?: "收到一条非标消息"
+
+        Logger.log(this, TAG, "获取结束：最终标题: $title, 最终文本: $text")
 
         return Pair(title, text)
     }
 
-    private fun showBannerNotification(sbn: StatusBarNotification) {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "mini_notification_banner_channel"
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Banner Style Notifications",
-                NotificationManager.IMPORTANCE_HIGH
-            )
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val originalNotification = sbn.notification
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, channelId)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-
-        builder.setSmallIcon(originalNotification.smallIcon)
-            .setContentTitle(originalNotification.extras.getString(Notification.EXTRA_TITLE))
-            .setContentText(originalNotification.extras.getString(Notification.EXTRA_TEXT))
-            .setAutoCancel(true)
-
-        val largeIcon: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            originalNotification.extras.getParcelable(Notification.EXTRA_LARGE_ICON, Bitmap::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            originalNotification.extras.getParcelable(Notification.EXTRA_LARGE_ICON)
-        }
-        if (largeIcon != null) {
-            builder.setLargeIcon(largeIcon)
-        }
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            @Suppress("DEPRECATION")
-            builder.setPriority(Notification.PRIORITY_HIGH)
-        }
-
-        builder.setContentIntent(originalNotification.contentIntent)
-
-        val newNotificationId = (sbn.packageName + sbn.id).hashCode()
-        notificationManager.notify(newNotificationId, builder.build())
-    }
-
     private fun showCustomOverlayNotification(sbn: StatusBarNotification) {
-        val notification = sbn.notification
-
-        Log.d(TAG, "Processing notification for package: ${sbn.packageName}")
-        Log.d(TAG, "Notification contentIntent: ${notification.contentIntent}")
-        Log.d(TAG, "Notification contentIntent creator: ${notification.contentIntent?.creatorPackage}")
-
         val (title, text) = getNotificationContent(sbn)
 
         val intent = Intent(this, OverlayService::class.java).apply {
             putExtra("title", title)
             putExtra("text", text)
             putExtra("isOngoing", sbn.isOngoing)
-            putExtra("packageName", sbn.packageName) // 添加包名
-
-            // 直接传递PendingIntent
-            putExtra("contentIntent", notification.contentIntent)
+            putExtra("packageName", sbn.packageName)
+            putExtra("contentIntent", sbn.notification.contentIntent)
 
             val smallIcon = sbn.notification.smallIcon
             val iconBitmap: Bitmap? = smallIcon?.loadDrawable(this@MyNotificationListenerService)?.let { drawable ->
@@ -202,40 +195,18 @@ class MyNotificationListenerService : NotificationListenerService() {
             if (iconBitmap != null) {
                 val stream = ByteArrayOutputStream()
                 iconBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                val iconByteArray = stream.toByteArray()
-                putExtra("icon", iconByteArray)
+                putExtra("icon", stream.toByteArray())
             }
 
             putExtra("duration", sharedPreferences.getInt("notification_duration", 5))
-            
-            // 修复：确保正确获取和传递弹窗位置设置
             val positionName = sharedPreferences.getString("popup_position", "TOP")
             val styleName = sharedPreferences.getString("popup_style", "NARROW")
 
-            // 确保即使 positionName 或 styleName 为空也能有默认值
-            val position = if (positionName != null) {
-                try {
-                    PopupPosition.valueOf(positionName)
-                } catch (e: IllegalArgumentException) {
-                    PopupPosition.TOP
-                }
-            } else {
-                PopupPosition.TOP
-            }
-            
-            val style = if (styleName != null) {
-                try {
-                    PopupStyle.valueOf(styleName)
-                } catch (e: IllegalArgumentException) {
-                    PopupStyle.NARROW
-                }
-            } else {
-                PopupStyle.NARROW
-            }
-            
+            val position = try { PopupPosition.valueOf(positionName!!) } catch (e: Exception) { PopupPosition.TOP }
+            val style = try { PopupStyle.valueOf(styleName!!) } catch (e: Exception) { PopupStyle.NARROW }
+
             putExtra("position", position)
             putExtra("style", style)
-            
             putExtra("backgroundColor", sharedPreferences.getInt("background_color", 0xFF333333.toInt()))
             putExtra("textColor", sharedPreferences.getInt("text_color", 0xFF000000.toInt()))
             putExtra("backgroundAlpha", sharedPreferences.getFloat("background_alpha", 0.5f))
@@ -244,7 +215,6 @@ class MyNotificationListenerService : NotificationListenerService() {
             putExtra("scrollingSpeed", sharedPreferences.getInt("scrolling_speed", 10))
         }
 
-        Log.d(TAG, "Starting OverlayService with contentIntent")
         startService(intent)
     }
 }
